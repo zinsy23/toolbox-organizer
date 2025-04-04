@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toolbox Organizer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Toolbox Organizer</h1>
+        </header>
+        
+        <div class="toolbox-config">
+            <div class="dimensions-form">
+                <h2>Toolbox Dimensions</h2>
+                <div class="form-group">
+                    <label for="toolbox-width">Width (in):</label>
+                    <input type="number" id="toolbox-width" min="1" max="100" value="20">
+                </div>
+                <div class="form-group">
+                    <label for="toolbox-height">Height (in):</label>
+                    <input type="number" id="toolbox-height" min="1" max="100" value="12">
+                </div>
+                <div class="form-group">
+                    <label for="toolbox-depth">Depth (in):</label>
+                    <input type="number" id="toolbox-depth" min="1" max="30" value="6">
+                </div>
+                <button id="update-dimensions">Update</button>
+            </div>
+            
+            <div class="drawer-controls">
+                <h2>Drawers & Shelves</h2>
+                <button id="add-drawer">Add Drawer</button>
+                <button id="add-shelf">Add Shelf</button>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <!-- Left side: Drawer selector -->
+            <div class="drawer-selector-panel">
+                <h2>Select Drawer/Shelf</h2>
+                <div class="instructions">
+                    <p><strong>How to Use:</strong></p>
+                    <ol>
+                        <li>Add drawers using buttons above</li>
+                        <li>Click a drawer below to select it</li>
+                        <li>Selected drawer will highlight in red</li>
+                    </ol>
+                </div>
+                <div id="toolbox-container">
+                    <div id="toolbox"></div>
+                    <div id="drawer-labels"></div>
+                </div>
+                <div id="drawers-list"></div>
+            </div>
+            
+            <!-- Middle: Selected drawer view -->
+            <div class="drawer-content-panel">
+                <h2>Selected: <span id="current-selection">None</span></h2>
+                <div class="instructions">
+                    <p><strong>Placement Area:</strong></p>
+                    <p>Drag items from the right panel into this area.</p>
+                </div>
+                <div class="selected-area">
+                    <div id="selected-drawer-view"></div>
+                </div>
+            </div>
+            
+            <!-- Right side: Item palette -->
+            <div class="item-palette-panel">
+                <h2>Available Items</h2>
+                <div class="instructions">
+                    <p><strong>Drag & Drop Instructions:</strong></p>
+                    <ol>
+                        <li>Select a drawer from the left panel</li>
+                        <li>Click and drag an item to the middle panel</li>
+                        <li>Items cannot overlap or exceed drawer boundaries</li>
+                        <li>To remove an item, drag it outside the drawer</li>
+                    </ol>
+                </div>
+                <div class="item-palette">
+                    <div id="items-container"></div>
+                    <button id="generate-items">Generate Random Items</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html> 
