@@ -12,6 +12,7 @@ const currentSelectionEl = document.getElementById('current-selection');
 const itemsContainerEl = document.getElementById('items-container');
 const selectedDrawerViewEl = document.getElementById('selected-drawer-view');
 const generateItemsBtn = document.getElementById('generate-items');
+const debugModeCheckbox = document.getElementById('debug-mode');
 
 // Application State
 const state = {
@@ -27,7 +28,8 @@ const state = {
     nextItemId: 1,
     nextDrawerId: 1,
     draggedItem: null,
-    dragOffset: { x: 0, y: 0 }
+    dragOffset: { x: 0, y: 0 },
+    debugMode: false
 };
 
 // Initialize the application
@@ -43,6 +45,17 @@ function setupEventListeners() {
     addDrawerBtn.addEventListener('click', () => addDrawerOrShelf('drawer'));
     addShelfBtn.addEventListener('click', () => addDrawerOrShelf('shelf'));
     generateItemsBtn.addEventListener('click', generateRandomItems);
+    
+    // Debug mode toggle
+    debugModeCheckbox.addEventListener('change', function() {
+        state.debugMode = this.checked;
+        console.log('Debug mode:', state.debugMode);
+        if (state.debugMode) {
+            showMessage("Debug mode enabled - overlap checking disabled", false);
+        } else {
+            showMessage("Debug mode disabled - overlap checking enabled", false);
+        }
+    });
     
     // Drag and drop events
     document.addEventListener('mousedown', handleMouseDown);
@@ -394,6 +407,12 @@ function renderDrawerItem(item) {
 
 // Handle Mouse Down (start drag)
 function handleMouseDown(e) {
+    // Remove any existing drag clones to prevent duplicates
+    const existingClone = document.getElementById('drag-clone');
+    if (existingClone) {
+        document.body.removeChild(existingClone);
+    }
+    
     console.log('Mouse down event on:', e.target);
     
     const target = e.target.closest('.tool-item, .drawer-item');
@@ -459,6 +478,17 @@ function handleMouseDown(e) {
     clone.style.zIndex = '1000';
     clone.style.opacity = '0.8';
     clone.id = 'drag-clone';
+    
+    // Ensure consistent sizing for the drag clone
+    if (itemType === 'drawer') {
+        // Find item data to ensure proper proportions
+        const itemData = state.items.find(i => i.id === itemId);
+        if (itemData) {
+            const scale = 20; // Same scale as in drawer view
+            clone.style.width = `${itemData.width * scale}px`;
+            clone.style.height = `${itemData.height * scale}px`;
+        }
+    }
     
     document.body.appendChild(clone);
     console.log('Drag clone created:', clone);
@@ -539,56 +569,63 @@ function handleMouseUp(e) {
                     y: y,
                     width: itemData.width,
                     height: itemData.height,
-                    instanceId: instanceId || 'new'
+                    instanceId: instanceId || 'new',
+                    drawerItems: state.drawerItems[state.selectedDrawerId]
                 });
                 
-                // Just allow placement for debugging
-                if (type === 'palette') {
-                    // Adding from palette creates a new instance
-                    const newInstanceId = Date.now().toString(); // Store as string
-                    state.drawerItems[state.selectedDrawerId] = state.drawerItems[state.selectedDrawerId] || [];
-                    state.drawerItems[state.selectedDrawerId].push({
-                        itemId: id,
-                        instanceId: newInstanceId,
-                        x: x,
-                        y: y
-                    });
-                    
-                    console.log('Added new item from palette:', {
-                        itemId: id, 
-                        instanceId: newInstanceId,
-                        x: x,
-                        y: y
-                    });
-                    
-                    renderSelectedDrawerView();
-                } else if (type === 'drawer') {
-                    // Find and update existing drawer item (using string comparison)
-                    const itemIndex = state.drawerItems[state.selectedDrawerId].findIndex(item => 
-                        item.instanceId == instanceId // use loose equality to handle string/number comparison
-                    );
-                    
-                    console.log('Trying to find item with instanceId:', {
-                        looking_for: instanceId,
-                        drawer_items: state.drawerItems[state.selectedDrawerId].map(i => i.instanceId)
-                    });
-                    
-                    if (itemIndex !== -1) {
-                        state.drawerItems[state.selectedDrawerId][itemIndex].x = x;
-                        state.drawerItems[state.selectedDrawerId][itemIndex].y = y;
-                        
-                        console.log('Updated existing drawer item:', {
+                // Make sure drawer items array exists
+                if (!state.drawerItems[state.selectedDrawerId]) {
+                    state.drawerItems[state.selectedDrawerId] = [];
+                }
+                
+                // Check if position is valid
+                const isValid = isValidPosition(x, y, itemData.width, itemData.height, instanceId);
+                console.log('Position valid:', isValid);
+                
+                if (isValid) {
+                    if (type === 'palette') {
+                        // Adding from palette creates a new instance
+                        const newInstanceId = Date.now().toString(); // Store as string
+                        state.drawerItems[state.selectedDrawerId].push({
                             itemId: id,
-                            instanceId: instanceId,
+                            instanceId: newInstanceId,
                             x: x,
-                            y: y,
-                            index: itemIndex
+                            y: y
                         });
                         
-                        renderSelectedDrawerView();
-                    } else {
-                        console.error('Could not find item with instanceId:', instanceId);
+                        console.log('Added new item from palette:', {
+                            itemId: id, 
+                            instanceId: newInstanceId,
+                            x: x,
+                            y: y
+                        });
+                    } else if (type === 'drawer') {
+                        // Find and update existing drawer item
+                        const itemIndex = state.drawerItems[state.selectedDrawerId].findIndex(item => 
+                            item.instanceId == instanceId // use loose equality
+                        );
+                        
+                        if (itemIndex !== -1) {
+                            state.drawerItems[state.selectedDrawerId][itemIndex].x = x;
+                            state.drawerItems[state.selectedDrawerId][itemIndex].y = y;
+                            
+                            console.log('Updated existing drawer item:', {
+                                itemId: id,
+                                instanceId: instanceId,
+                                x: x,
+                                y: y,
+                                index: itemIndex
+                            });
+                        } else {
+                            console.error('Could not find item with instanceId:', instanceId);
+                            showMessage("Error updating item position.");
+                        }
                     }
+                    
+                    renderSelectedDrawerView();
+                } else {
+                    console.log('Position invalid, could not place item');
+                    showMessage("Cannot place item here - overlapping with another item or outside boundaries", true);
                 }
             } else {
                 console.error('Item data not found for id:', id);
@@ -619,35 +656,51 @@ function handleMouseUp(e) {
 
 // Check if position is valid (within bounds and not overlapping)
 function isValidPosition(x, y, width, height, currentInstanceId = null) {
+    // If debug mode is enabled, always return true
+    if (state.debugMode) {
+        console.log('Debug mode enabled, allowing placement');
+        return true;
+    }
+    
     const drawer = state.drawers.find(d => d.id === state.selectedDrawerId);
     if (!drawer) return false;
     
     const { width: drawerWidth } = state.toolbox;
     const drawerHeight = drawer.height;
     
-    // Check if within bounds with a bit more tolerance
-    const margin = 0.05; // 0.05 inch margin for boundary checking
+    // Check if within bounds with minimal tolerance
+    const margin = 0.01;
     if (x < -margin || y < -margin || x + width > drawerWidth + margin || y + height > drawerHeight + margin) {
         console.log('Out of bounds:', { x, y, width, height, drawerWidth, drawerHeight });
         return false;
     }
     
+    // Initialize drawer items array if it doesn't exist
+    if (!state.drawerItems[state.selectedDrawerId]) {
+        state.drawerItems[state.selectedDrawerId] = [];
+    }
+    
+    // Get drawer items
+    const drawerItems = state.drawerItems[state.selectedDrawerId];
+    console.log('Drawer items length:', drawerItems.length);
+    
     // Allow placement if drawer is empty
-    const drawerItems = state.drawerItems[state.selectedDrawerId] || [];
-    if (drawerItems.length === 0) {
+    if (!drawerItems || drawerItems.length === 0) {
+        console.log('Drawer is empty, allowing placement');
         return true;
     }
     
     // If we're moving an existing item and it's the only item in the drawer, allow it
     if (currentInstanceId && drawerItems.length === 1 && 
-        drawerItems[0].instanceId === currentInstanceId) {
+        drawerItems[0].instanceId == currentInstanceId) {
+        console.log('Moving the only item in drawer, allowing placement');
         return true;
     }
     
     // Check for overlap with other items
     for (const item of drawerItems) {
         // Skip the current item if we're moving it
-        if (currentInstanceId && item.instanceId === currentInstanceId) {
+        if (currentInstanceId && item.instanceId == currentInstanceId) {
             continue;
         }
         
@@ -657,8 +710,8 @@ function isValidPosition(x, y, width, height, currentInstanceId = null) {
             continue;
         }
         
-        // Use a smaller gap to allow items to be placed closer together
-        const gap = 0.05; // 0.05 inch gap between items (reduced from 0.1)
+        // Minimal gap between items
+        const gap = 0.01;
         
         // Check for intersection with gap
         const overlaps = !(
@@ -684,23 +737,81 @@ function isValidPosition(x, y, width, height, currentInstanceId = null) {
         }
     }
     
+    console.log('Position valid, allowing placement');
     return true;
 }
 
-// Show temporary message
-function showMessage(text) {
+// Show temporary message with override option
+function showMessage(text, allowOverride = false) {
     const messageEl = document.createElement('div');
     messageEl.className = 'message';
-    messageEl.textContent = text;
+    
+    // Create text container
+    const textEl = document.createElement('div');
+    textEl.textContent = text;
+    messageEl.appendChild(textEl);
+    
+    // Add override button if specified
+    if (allowOverride && state.draggedItem) {
+        const overrideBtn = document.createElement('button');
+        overrideBtn.textContent = 'Override';
+        overrideBtn.className = 'override-btn';
+        overrideBtn.addEventListener('click', () => {
+            // Force placement without overlap check
+            const { id, type, instanceId } = state.draggedItem;
+            
+            const itemData = state.items.find(item => item.id === id);
+            if (!itemData) return;
+            
+            // Place at center of drawer if possible
+            const drawer = state.drawers.find(d => d.id === state.selectedDrawerId);
+            if (!drawer) return;
+            
+            const x = Math.max(0, (state.toolbox.width - itemData.width) / 2);
+            const y = Math.max(0, (drawer.height - itemData.height) / 2);
+            
+            if (type === 'palette') {
+                // Adding from palette
+                const newInstanceId = Date.now().toString();
+                state.drawerItems[state.selectedDrawerId] = state.drawerItems[state.selectedDrawerId] || [];
+                state.drawerItems[state.selectedDrawerId].push({
+                    itemId: id,
+                    instanceId: newInstanceId,
+                    x: x,
+                    y: y
+                });
+            } else if (type === 'drawer' && instanceId) {
+                // Update existing item
+                const itemIndex = state.drawerItems[state.selectedDrawerId].findIndex(item => 
+                    item.instanceId == instanceId
+                );
+                
+                if (itemIndex !== -1) {
+                    state.drawerItems[state.selectedDrawerId][itemIndex].x = x;
+                    state.drawerItems[state.selectedDrawerId][itemIndex].y = y;
+                }
+            }
+            
+            // Remove the message
+            document.body.removeChild(messageEl);
+            
+            // Render the updated drawer
+            renderSelectedDrawerView();
+        });
+        
+        messageEl.appendChild(overrideBtn);
+    }
     
     document.body.appendChild(messageEl);
     
     setTimeout(() => {
         messageEl.classList.add('message-fade');
         setTimeout(() => {
-            document.body.removeChild(messageEl);
+            if (document.body.contains(messageEl)) {
+                document.body.removeChild(messageEl);
+            }
         }, 500);
-    }, 2000);
+    }, 5000);
 }
 
 // Initialize the app when DOM is loaded
