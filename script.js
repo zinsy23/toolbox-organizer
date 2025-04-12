@@ -322,8 +322,16 @@ function renderSelectedDrawerView() {
     selectedDrawerViewEl.style.width = `${width * scale}px`;
     selectedDrawerViewEl.style.height = `${drawerHeight * scale}px`;
     
+    // Add grid lines for visual reference
+    const gridEl = document.createElement('div');
+    gridEl.className = 'drawer-grid';
+    gridEl.style.width = '100%';
+    gridEl.style.height = '100%';
+    selectedDrawerViewEl.appendChild(gridEl);
+    
     // Render items in this drawer
     const drawerItems = state.drawerItems[drawer.id] || [];
+    console.log('Rendering drawer items:', drawerItems);
     
     if (drawerItems.length === 0) {
         // Add a placeholder message when drawer is empty
@@ -333,6 +341,7 @@ function renderSelectedDrawerView() {
         selectedDrawerViewEl.appendChild(placeholderEl);
     } else {
         drawerItems.forEach(item => {
+            console.log('Rendering item:', item);
             renderDrawerItem(item);
         });
     }
@@ -340,65 +349,111 @@ function renderSelectedDrawerView() {
 
 // Render a single item in the drawer
 function renderDrawerItem(item) {
-    const itemData = state.items.find(i => i.id === item.itemId);
-    if (!itemData) return;
-    
     const scale = 20; // Scale for display (pixels per inch)
-    const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
+    
+    // Find the actual item from our items list
+    const itemData = state.items.find(i => i.id === item.itemId);
+    if (!itemData) {
+        console.error('Item data not found:', item);
+        return;
+    }
     
     const itemEl = document.createElement('div');
-    itemEl.className = 'tool-item';
-    itemEl.dataset.id = item.itemId;
-    itemEl.dataset.itemInstanceId = item.instanceId;
-    itemEl.dataset.type = 'drawer';
+    itemEl.className = 'drawer-item';
+    itemEl.setAttribute('data-id', item.itemId);
+    itemEl.setAttribute('data-type', 'drawer');
+    itemEl.setAttribute('data-item-instance-id', item.instanceId);
+    
+    // Use itemData for width and height
     itemEl.style.width = `${itemData.width * scale}px`;
     itemEl.style.height = `${itemData.height * scale}px`;
     itemEl.style.left = `${item.x * scale}px`;
     itemEl.style.top = `${item.y * scale}px`;
-    itemEl.style.backgroundColor = colors[item.itemId % colors.length];
-    itemEl.style.boxShadow = '2px 2px 5px rgba(0, 0, 0, 0.2)';
-    itemEl.innerHTML = `${itemData.name}<br>${itemData.width.toFixed(1)}" × ${itemData.height.toFixed(1)}"`;
+    
+    // Add item name label
+    const labelEl = document.createElement('div');
+    labelEl.className = 'item-label';
+    labelEl.textContent = itemData.name;
+    itemEl.appendChild(labelEl);
+    
+    // Add direct event handler to make sure it's draggable
+    itemEl.addEventListener('mousedown', handleMouseDown);
     
     selectedDrawerViewEl.appendChild(itemEl);
+    
+    console.log('Item rendered with direct event listener:', {
+        itemId: item.itemId,
+        instanceId: item.instanceId,
+        name: itemData.name,
+        x: item.x,
+        y: item.y,
+        width: itemData.width,
+        height: itemData.height
+    });
 }
 
 // Handle Mouse Down (start drag)
 function handleMouseDown(e) {
-    if (!e.target.matches('.tool-item')) return;
+    console.log('Mouse down event on:', e.target);
     
-    const itemEl = e.target;
-    const itemId = parseInt(itemEl.dataset.id);
-    const itemType = itemEl.dataset.type;
+    const target = e.target.closest('.tool-item, .drawer-item');
+    if (!target) {
+        console.log('No valid target found for dragging');
+        return;
+    }
+    
+    const itemType = target.dataset.type;
+    const itemId = parseInt(target.dataset.id);
+    
+    console.log('Mouse down on item:', {
+        type: itemType,
+        id: itemId,
+        element: target,
+        tagName: target.tagName,
+        className: target.className,
+        attributes: {
+            id: target.getAttribute('data-id'),
+            type: target.getAttribute('data-type'),
+            instanceId: target.getAttribute('data-item-instance-id')
+        }
+    });
     
     // Only allow dragging if a drawer is selected for palette items
     if (itemType === 'palette' && !state.selectedDrawerId) {
-        alert('Please select a drawer or shelf first before dragging items.');
+        showMessage('Please select a drawer or shelf first before dragging items.');
         return;
     }
     
     // Calculate offset from the top-left corner of the item
-    const rect = itemEl.getBoundingClientRect();
+    const rect = target.getBoundingClientRect();
     const offsetX = e.clientX - rect.left;
     const offsetY = e.clientY - rect.top;
     
-    // Store dragged item and offset
+    // Store dragged item info
     state.draggedItem = {
-        el: itemEl,
+        el: target,
         id: itemId,
         type: itemType
     };
     
     if (itemType === 'drawer') {
-        // If dragging from drawer, get the instance ID too
-        state.draggedItem.instanceId = parseInt(itemEl.dataset.itemInstanceId);
+        // If dragging from drawer, get the instance ID (as string, not number)
+        state.draggedItem.instanceId = target.dataset.itemInstanceId;
+        
+        console.log('Dragging drawer item:', {
+            id: itemId,
+            type: itemType,
+            instanceId: state.draggedItem.instanceId,
+            instanceIdAttribute: target.dataset.itemInstanceId
+        });
     }
     
     state.dragOffset = { x: offsetX, y: offsetY };
     
     // Create a clone for dragging instead of moving the original
-    const clone = itemEl.cloneNode(true);
+    const clone = target.cloneNode(true);
     clone.classList.add('dragging');
-    clone.style.position = 'fixed'; // Use fixed positioning for the drag clone
+    clone.style.position = 'fixed';
     clone.style.left = `${e.clientX - offsetX}px`;
     clone.style.top = `${e.clientY - offsetY}px`;
     clone.style.zIndex = '1000';
@@ -406,6 +461,7 @@ function handleMouseDown(e) {
     clone.id = 'drag-clone';
     
     document.body.appendChild(clone);
+    console.log('Drag clone created:', clone);
     
     // Prevent default drag behavior
     e.preventDefault();
@@ -433,6 +489,8 @@ function handleMouseUp(e) {
     const { id, type, instanceId } = state.draggedItem;
     const dragClone = document.getElementById('drag-clone');
     
+    console.log('Mouse up with dragged item:', state.draggedItem);
+    
     if (dragClone) {
         // Get position of the drag clone
         const itemRect = dragClone.getBoundingClientRect();
@@ -451,145 +509,112 @@ function handleMouseUp(e) {
         );
         
         if (isOverDrawer && state.selectedDrawerId) {
+            // Get the current drawer
+            const drawer = state.drawers.find(d => d.id === state.selectedDrawerId);
+            if (!drawer) return;
+            
             // Convert position to drawer coordinates
             const scale = 20; // Scale (pixels per inch)
             
-            // Calculate center position of the item
-            const centerX = (itemRect.left + itemRect.right) / 2;
-            const centerY = (itemRect.top + itemRect.bottom) / 2;
-            
-            // Convert to drawer coordinates, centering the item where the mouse is
-            const x = (centerX - selectedDrawerRect.left) / scale - (itemRect.width / scale / 2);
-            const y = (centerY - selectedDrawerRect.top) / scale - (itemRect.height / scale / 2);
-            
-            // Round to improve grid alignment
-            const roundedX = Math.round(x * 2) / 2;
-            const roundedY = Math.round(y * 2) / 2;
+            // Calculate position relative to drawer, accounting for scroll
+            let x = (itemRect.left - selectedDrawerRect.left + selectedDrawerViewEl.scrollLeft) / scale;
+            let y = (itemRect.top - selectedDrawerRect.top + selectedDrawerViewEl.scrollTop) / scale;
             
             // Get item details
             const itemData = state.items.find(item => item.id === id);
             
             if (itemData) {
-                // Check if position is valid (within bounds and not overlapping other items)
-                const isValid = isValidPosition(roundedX, roundedY, itemData.width, itemData.height, instanceId);
+                // Round to nearest 0.25 inch for more precise placement
+                x = Math.round(x * 4) / 4;
+                y = Math.round(y * 4) / 4;
                 
-                if (isValid) {
-                    // If dragging from palette, create new instance
-                    if (type === 'palette') {
-                        const instanceId = Date.now(); // Use timestamp as unique instance ID
-                        state.drawerItems[state.selectedDrawerId].push({
-                            itemId: id,
-                            instanceId,
-                            x: roundedX,
-                            y: roundedY
-                        });
-                    } 
-                    // If dragging from drawer, update position
-                    else if (type === 'drawer') {
-                        const itemIndex = state.drawerItems[state.selectedDrawerId].findIndex(item => 
-                            item.instanceId === instanceId
-                        );
-                        
-                        if (itemIndex !== -1) {
-                            state.drawerItems[state.selectedDrawerId][itemIndex].x = roundedX;
-                            state.drawerItems[state.selectedDrawerId][itemIndex].y = roundedY;
-                        }
-                    }
+                // Ensure the item stays within bounds
+                x = Math.max(0, Math.min(x, state.toolbox.width - itemData.width));
+                y = Math.max(0, Math.min(y, drawer.height - itemData.height));
+                
+                console.log('Attempting to place item:', {
+                    id: id,
+                    name: itemData.name,
+                    x: x,
+                    y: y,
+                    width: itemData.width,
+                    height: itemData.height,
+                    instanceId: instanceId || 'new'
+                });
+                
+                // Just allow placement for debugging
+                if (type === 'palette') {
+                    // Adding from palette creates a new instance
+                    const newInstanceId = Date.now().toString(); // Store as string
+                    state.drawerItems[state.selectedDrawerId] = state.drawerItems[state.selectedDrawerId] || [];
+                    state.drawerItems[state.selectedDrawerId].push({
+                        itemId: id,
+                        instanceId: newInstanceId,
+                        x: x,
+                        y: y
+                    });
                     
-                    // Re-render the drawer
+                    console.log('Added new item from palette:', {
+                        itemId: id, 
+                        instanceId: newInstanceId,
+                        x: x,
+                        y: y
+                    });
+                    
                     renderSelectedDrawerView();
-                } else {
-                    // Try to find a valid position nearby
-                    const newPos = findValidPosition(roundedX, roundedY, itemData.width, itemData.height, instanceId);
-                    if (newPos) {
-                        // Valid position found nearby
-                        if (type === 'palette') {
-                            const instanceId = Date.now();
-                            state.drawerItems[state.selectedDrawerId].push({
-                                itemId: id,
-                                instanceId,
-                                x: newPos.x,
-                                y: newPos.y
-                            });
-                            renderSelectedDrawerView();
-                        } else if (type === 'drawer') {
-                            const itemIndex = state.drawerItems[state.selectedDrawerId].findIndex(item => 
-                                item.instanceId === instanceId
-                            );
-                            
-                            if (itemIndex !== -1) {
-                                state.drawerItems[state.selectedDrawerId][itemIndex].x = newPos.x;
-                                state.drawerItems[state.selectedDrawerId][itemIndex].y = newPos.y;
-                                renderSelectedDrawerView();
-                            }
-                        }
-                    } else {
-                        // If invalid position and no valid position found nearby, show a message
-                        showMessage("Items can't overlap or exceed drawer boundaries!");
+                } else if (type === 'drawer') {
+                    // Find and update existing drawer item (using string comparison)
+                    const itemIndex = state.drawerItems[state.selectedDrawerId].findIndex(item => 
+                        item.instanceId == instanceId // use loose equality to handle string/number comparison
+                    );
+                    
+                    console.log('Trying to find item with instanceId:', {
+                        looking_for: instanceId,
+                        drawer_items: state.drawerItems[state.selectedDrawerId].map(i => i.instanceId)
+                    });
+                    
+                    if (itemIndex !== -1) {
+                        state.drawerItems[state.selectedDrawerId][itemIndex].x = x;
+                        state.drawerItems[state.selectedDrawerId][itemIndex].y = y;
                         
-                        // Re-render to reset
+                        console.log('Updated existing drawer item:', {
+                            itemId: id,
+                            instanceId: instanceId,
+                            x: x,
+                            y: y,
+                            index: itemIndex
+                        });
+                        
                         renderSelectedDrawerView();
-                        renderItems();
+                    } else {
+                        console.error('Could not find item with instanceId:', instanceId);
                     }
                 }
+            } else {
+                console.error('Item data not found for id:', id);
             }
         } else {
-            // If not over drawer, check if this was a drawer item being removed
+            // If not over drawer and it's a drawer item, remove it
             if (type === 'drawer') {
-                // Remove the item from the drawer
                 const itemIndex = state.drawerItems[state.selectedDrawerId].findIndex(item => 
-                    item.instanceId === instanceId
+                    item.instanceId == instanceId // use loose equality for comparison
                 );
                 
                 if (itemIndex !== -1) {
+                    console.log('Removing item from drawer:', {
+                        instanceId: instanceId,
+                        index: itemIndex
+                    });
                     state.drawerItems[state.selectedDrawerId].splice(itemIndex, 1);
                 }
                 
-                // Re-render
                 renderSelectedDrawerView();
-            } else {
-                // Just re-render to reset
-                renderItems();
             }
         }
     }
     
     // Reset dragged item
     state.draggedItem = null;
-}
-
-// Try to find a valid position near the attempted drop point
-function findValidPosition(x, y, width, height, currentInstanceId) {
-    // Grid search for a valid position
-    const searchRadius = 2; // Search up to 2 inches in each direction
-    const gridStep = 0.5; // Check every 0.5 inch
-    
-    // Get toolbox boundaries
-    const drawer = state.drawers.find(d => d.id === state.selectedDrawerId);
-    if (!drawer) return null;
-    
-    const { width: maxWidth } = state.toolbox;
-    const maxHeight = drawer.height;
-    
-    // Try positions in a spiral pattern outward from the original point
-    for (let r = 0; r <= searchRadius; r += gridStep) {
-        // Try positions along the perimeter of the current radius
-        for (let dx = -r; dx <= r; dx += gridStep) {
-            for (let dy = -r; dy <= r; dy += gridStep) {
-                // Skip if not on the perimeter
-                if (r > 0 && Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-                
-                const newX = Math.max(0, Math.min(x + dx, maxWidth - width));
-                const newY = Math.max(0, Math.min(y + dy, maxHeight - height));
-                
-                if (isValidPosition(newX, newY, width, height, currentInstanceId)) {
-                    return { x: newX, y: newY };
-                }
-            }
-        }
-    }
-    
-    return null; // No valid position found
 }
 
 // Check if position is valid (within bounds and not overlapping)
@@ -600,15 +625,26 @@ function isValidPosition(x, y, width, height, currentInstanceId = null) {
     const { width: drawerWidth } = state.toolbox;
     const drawerHeight = drawer.height;
     
-    // Check if within bounds with a small margin
-    const margin = 0.01; // Small margin to avoid edge cases
+    // Check if within bounds with a bit more tolerance
+    const margin = 0.05; // 0.05 inch margin for boundary checking
     if (x < -margin || y < -margin || x + width > drawerWidth + margin || y + height > drawerHeight + margin) {
+        console.log('Out of bounds:', { x, y, width, height, drawerWidth, drawerHeight });
         return false;
     }
     
-    // Check for overlap with other items
+    // Allow placement if drawer is empty
     const drawerItems = state.drawerItems[state.selectedDrawerId] || [];
+    if (drawerItems.length === 0) {
+        return true;
+    }
     
+    // If we're moving an existing item and it's the only item in the drawer, allow it
+    if (currentInstanceId && drawerItems.length === 1 && 
+        drawerItems[0].instanceId === currentInstanceId) {
+        return true;
+    }
+    
+    // Check for overlap with other items
     for (const item of drawerItems) {
         // Skip the current item if we're moving it
         if (currentInstanceId && item.instanceId === currentInstanceId) {
@@ -616,19 +652,35 @@ function isValidPosition(x, y, width, height, currentInstanceId = null) {
         }
         
         const itemData = state.items.find(i => i.id === item.itemId);
-        if (!itemData) continue;
+        if (!itemData) {
+            console.warn('Item data not found for item:', item);
+            continue;
+        }
         
-        // Add a small buffer to avoid touching items
-        const buffer = 0.05; // Small buffer in inches
+        // Use a smaller gap to allow items to be placed closer together
+        const gap = 0.05; // 0.05 inch gap between items (reduced from 0.1)
         
-        // Check for intersection with buffer
-        if (!(
-            x + width + buffer <= item.x ||
-            x >= item.x + itemData.width + buffer ||
-            y + height + buffer <= item.y ||
-            y >= item.y + itemData.height + buffer
-        )) {
-            return false; // Overlapping
+        // Check for intersection with gap
+        const overlaps = !(
+            x + width <= item.x - gap ||
+            x >= item.x + itemData.width + gap ||
+            y + height <= item.y - gap ||
+            y >= item.y + itemData.height + gap
+        );
+        
+        if (overlaps) {
+            console.log('Overlap detected:', {
+                new: { x, y, width, height },
+                existing: { 
+                    itemId: item.itemId,
+                    instanceId: item.instanceId,
+                    x: item.x, 
+                    y: item.y, 
+                    width: itemData.width, 
+                    height: itemData.height 
+                }
+            });
+            return false;
         }
     }
     
@@ -652,4 +704,35 @@ function showMessage(text) {
 }
 
 // Initialize the app when DOM is loaded
-document.addEventListener('DOMContentLoaded', initApp); 
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing app');
+    initApp();
+    
+    // Additional check to ensure event listeners are set up
+    console.log('Manually adding event listeners');
+    document.addEventListener('mousedown', (e) => {
+        console.log('Global mousedown event detected');
+        handleMouseDown(e);
+    });
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    
+    // Add event listener for all existing drawer items
+    document.querySelectorAll('.drawer-item').forEach(item => {
+        console.log('Adding event listener to existing drawer item:', item);
+        item.addEventListener('mousedown', handleMouseDown);
+    });
+});
+
+// Let's add direct debugging to every step of a click
+document.addEventListener('click', function(e) {
+    console.log('Click event on:', e.target);
+});
+
+// Force refresh the view
+setTimeout(() => {
+    console.log('Forcing refresh of views');
+    renderDrawersList();
+    renderSelectedDrawerView();
+    renderItems();
+}, 1000); 
