@@ -62,3 +62,4 @@ This application works best in modern browsers that support ES6 and the Drag and
 - Dimensions on a per drawer basis
 - Drag tool holders in drawers free form
 - Tool holders are a 2D realistic view of that product
+- Allow people to add toolbox items to Shopify cart from this interface
