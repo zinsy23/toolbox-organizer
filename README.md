@@ -54,3 +54,11 @@ This application works best in modern browsers that support ES6 and the Drag and
 - Firefox
 - Edge
 - Safari 
+
+## Future Work:
+- Fix collision detection bugs
+- Remove shelf feature
+- Make the toolbox more realistic
+- Dimensions on a per drawer basis
+- Drag tool holders in drawers free form
+- Tool holders are a 2D realistic view of that product
